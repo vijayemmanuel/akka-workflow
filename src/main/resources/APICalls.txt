@@ -1,0 +1,13 @@
+Account
+POST : curl -X POST -H "Content-Type: application/json" -d '{"name" : "Account1","subscription" : "mysubs" }' http://127.0.0.1:8051/accounts/
+PUT : curl -X PUT -H "Content-Type: application/json" -d '{"accountId" : "f635a43f-d0a9-40bc-afef-c82e233d5d55", "name" : "newAccount1","subscription" : "mysubs" }' http://127.0.0.1:8051/accounts/
+GET : curl http://127.0.0.1:8051/accounts/f635a43f-d0a9-40bc-afef-c82e233d5d55
+
+Task
+POST : curl -X POST -H "Content-Type: application/json" -d '{"name" : "task2","taskType":"test","priority":"test","assignee":"ajay","reporter":"test","dueDate":"2020-10-27" }' http://127.0.0.1:8051/accounts/f635a43f-d0a9-40bc-afef-c82e233d5d55/tasks
+PUT : curl -X PUT -H "Content-Type: application/json" -d '{"taskId" : "f084fc27-b6ef-42ab-8b9c-63c7f1aa6d1c","name" : "task1","taskType":"test","priority":"test","assignee":"vijay","reporter":"test","dueDate":"2020-10-27" }' http://127.0.0.1:8051/accounts/f635a43f-d0a9-40bc-afef-c82e233d5d55/tasks
+DELETE : curl -X DELETE -H "Content-Type: application/json" -d '{"taskId" : "f084fc27-b6ef-42ab-8b9c-63c7f1aa6d1c" }' http://127.0.0.1:8051/accounts/f635a43f-d0a9-40bc-afef-c82e233d5d55/tasks
+GET : curl http://127.0.0.1:8051/accounts/f635a43f-d0a9-40bc-afef-c82e233d5d55/tasks/1a376e97-0048-44cf-a4dc-1b9802cbfb14
+
+Cassandra
+select persistence_id,partition_nr,sequence_nr,timestamp,tags,ser_manifest from akka.messages;
