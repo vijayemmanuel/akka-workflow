@@ -1,3 +1,4 @@
+enablePlugins(Cinnamon)
 
 val AkkaVersion = "2.6.4"
 val AkkaHttpVersion = "10.1.11"
@@ -10,6 +11,8 @@ lazy val buildSettings = Seq(
   scalaVersion := "2.13.2",
   version := "0.1"
 )
+
+parallelExecution in ThisBuild := false
 
 lazy val commonScalacOptions = Seq(
   "-deprecation",
@@ -42,13 +45,33 @@ lazy val `workflow-app` = project
       "com.typesafe.akka" %% "akka-persistence-typed" % AkkaVersion,
       "com.typesafe.akka" %% "akka-serialization-jackson" % AkkaVersion,
       "com.typesafe.akka" %% "akka-distributed-data" % AkkaVersion,
-      "com.typesafe.akka" %% "akka-slf4j" % AkkaVersion,
+
+      //Persistence
       "com.typesafe.akka" %% "akka-persistence-cassandra" % AkkaPersistenceCassandraVersion,
       "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % AkkaPersistenceCassandraVersion,
+
+      // Http
       "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
       "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion,
+
+      // Management
       "com.lightbend.akka.management" %% "akka-management" % AkkaManagementVersion,
       "com.lightbend.akka.management" %% "akka-management-cluster-http" % AkkaManagementVersion,
-      "ch.qos.logback" % "logback-classic" % LogbackVersion)
+
+      //Logback
+      "com.typesafe.akka" %% "akka-slf4j" % AkkaVersion,
+      "ch.qos.logback" % "logback-classic" % LogbackVersion,
+
+      // Telemetry
+      Cinnamon.library.cinnamonAkka,
+      Cinnamon.library.cinnamonAkkaHttp,
+      Cinnamon.library.cinnamonJvmMetricsProducer,
+      Cinnamon.library.cinnamonPrometheus,
+      Cinnamon.library.cinnamonPrometheusHttpServer
+
+    )
   )
 
+
+cinnamon in run := true
+cinnamon in test := true

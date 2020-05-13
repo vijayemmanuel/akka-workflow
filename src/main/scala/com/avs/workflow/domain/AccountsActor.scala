@@ -28,6 +28,8 @@ object AccountsActor {
   final case class Accepted(summary: Summary) extends Confirmation
   final case class Rejected(reason: String) extends Confirmation
 
+  case class Account(accountId: String, name: String, subscription: String)
+
 
   //State
   final case class State(account: Account, tasks : Seq[String]) extends CborSerializable {
@@ -72,7 +74,6 @@ object AccountsActor {
   }
 
   //case class WorkflowTask(task : Map[String,String])
-  case class Account(accountId: String, name: String, subscription: String)
 
   //Command
   sealed trait Command extends CborSerializable
