@@ -1,10 +1,10 @@
 package com.avs.workflow.utilities
 
-import java.util.Date
 import java.util.concurrent.TimeUnit
 
 import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors}
 import akka.actor.typed.{ActorSystem, Behavior}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model.{HttpMethods, HttpRequest, MessageEntity}
@@ -15,7 +15,7 @@ import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 import com.avs.workflow.utilities.Simulation.Trigger
 
-import scala.concurrent.{Future}
+import scala.concurrent.Future
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Random
@@ -39,8 +39,6 @@ class Simulation(context: ActorContext[Trigger],targetPorts: Seq[Int]) extends
   AbstractBehavior[Trigger](context)
   {
     import Simulation._
-    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-    import com.avs.workflow.bootstrap.JsonFormats._
 
     implicit val ec = context.system.executionContext
     implicit val sys = context.system
@@ -55,7 +53,7 @@ class Simulation(context: ActorContext[Trigger],targetPorts: Seq[Int]) extends
     override def onMessage(message: Trigger): Behavior[Trigger] = {
       message match {
         case Start =>
-          context.system.log.info(s"Load test start")
+          //context.system.log.info(s"Load test start")
           startTime = System.currentTimeMillis()
           run().map(x => context.self ! Summary(x.accountId))
         case Stop =>
@@ -73,11 +71,11 @@ class Simulation(context: ActorContext[Trigger],targetPorts: Seq[Int]) extends
     for {
       accountId <- openAccount().map(_.accountId)
       _ <- getAccount(accountId)
-      //_ <- addTask(accountId, "Steak")
+      _ <- addTask(accountId, "Steak")
       _ <- getAccount(accountId)
-      //_ <- addTask(accountId, "Salad")
+      _ <- addTask(accountId, "Salad")
       _ <- getAccount(accountId)
-      //_ <- addTask(accountId, "Milk")
+      _ <- addTask(accountId, "Milk")
       account <- getAccount(accountId)
     } yield {
       Summary(account.accountId)
@@ -85,7 +83,9 @@ class Simulation(context: ActorContext[Trigger],targetPorts: Seq[Int]) extends
   }
 
   private def openAccount(): Future[Summary] = {
-    context.system.log.info(s"Opening account http://localhost:${port}/accounts}")
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+    import com.avs.workflow.bootstrap.JsonFormats._
+    //context.system.log.info(s"Opening account http://localhost:${port}/accounts}")
     for {
       requestEntity <- Marshal(WorkflowRoutes.AddAccount("Account1","Musubs")).to[MessageEntity]
       request = HttpRequest(HttpMethods.POST, s"http://localhost:$port/accounts", entity = requestEntity)
@@ -98,8 +98,10 @@ class Simulation(context: ActorContext[Trigger],targetPorts: Seq[Int]) extends
   }
 
   private def getAccount(id: String): Future[Summary] = {
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+    import com.avs.workflow.bootstrap.JsonFormats._
 
-    context.system.log.info(s"Getting account http://localhost:$port/accounts/${id}")
+    //context.system.log.info(s"Getting account http://localhost:$port/accounts/${id}")
     val request = HttpRequest(HttpMethods.GET, s"http://localhost:$port/accounts/${id}")
 
     for {
@@ -112,15 +114,27 @@ class Simulation(context: ActorContext[Trigger],targetPorts: Seq[Int]) extends
   }
 
   private def addTask(accountId: String, itemName: String): Future[Summary] = {
-    context.system.log.info(s"Adding task http://localhost:$port/accounts/${accountId}/tasks")
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+    import com.avs.workflow.bootstrap.JsonFormats._
+
+    //context.system.log.info(s"Adding task http://localhost:$port/accounts/${accountId}/tasks")
+
+    import spray.json._
+    import DefaultJsonProtocol._
+    val body = Map("name" -> itemName, "taskType" -> "test","priority"->"test","assignee"->"test","reporter"->"test","dueDate"->"2020-10-27").toJson
+    val entity = HttpEntity(ContentTypes.`application/json`, body.toString())
+
+    val request = HttpRequest(HttpMethods.POST,
+      s"http://localhost:$port/accounts/${accountId}/tasks", entity = entity
+    )
+
     for {
-      requestEntity <- Marshal(WorkflowRoutes.AddTask(itemName, "None","vv","ss","ss",new Date("2020-10-27"))).to[MessageEntity]
-      request = HttpRequest(HttpMethods.POST, s"http://localhost:$port/accounts/${accountId}/tasks", entity = requestEntity)
+      //requestEntity <- Marshal(WorkflowRoutes.AddTask(itemName, "None","vv","ss","ss", new Date())).to[MessageEntity]
       response <- http.singleRequest(request)
       responseEntity <- response.entity.toStrict(5.seconds)
-      task <- Unmarshal(responseEntity).to[TasksActor.Summary]
+      account <- Unmarshal(responseEntity).to[AccountsActor.Summary]
     } yield {
-      Summary(task.task.taskId)
+      Summary(account.account.accountId)
     }
   }
 }

@@ -5,12 +5,12 @@ import java.util.Date
 
 import akka.actor.typed.ActorSystem
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
-import akka.cluster.typed.Cluster
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
+import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.util.Timeout
 import com.avs.workflow.bootstrap.WorkflowRoutes.{AddAccount, AddTask, DeleteTask, UpdateAccount, UpdateTask}
 import com.avs.workflow.domain.{AccountsActor, TasksActor}
+import spray.json.DeserializationException
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -50,56 +50,25 @@ final class WorkflowRoutes (system: ActorSystem[_]) {
   import akka.http.scaladsl.server.Directives._
   import JsonFormats._
 
-  def workflow: Route = concat (
-    pathPrefix("accounts") {
+  private def exceptionHandler: ExceptionHandler = ExceptionHandler {
+    case ex: DeserializationException =>
+      complete(HttpResponse(StatusCodes.InternalServerError,entity = ex.getMessage))
+    case ex =>
+      complete(HttpResponse(StatusCodes.InternalServerError, entity = ex.getMessage))
+  }
+
+  def workflow: Route =
+    handleExceptions(exceptionHandler) {
       concat(
-        post {
-          val newAccountId = java.util.UUID.randomUUID.toString
-
-          entity(as[AddAccount]) { data =>
-            val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, newAccountId)
-            val reply: Future[AccountsActor.Confirmation] =
-              entityRef.ask(AccountsActor.AddAccount(data.name, data.subscription,_))
-            onSuccess(reply) {
-              case AccountsActor.Accepted(summary) =>
-                complete(StatusCodes.OK -> summary)
-              case AccountsActor.Rejected(reason) =>
-                complete(StatusCodes.BadRequest, reason)
-            }
-          }
-        },
-        put {
-          entity(as[UpdateAccount]) { data =>
-            val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, data.accountId)
-            val reply: Future[AccountsActor.Confirmation] =
-              entityRef.ask(AccountsActor.UpdateAccount(data.name, data.subscription, _))
-            onSuccess(reply) {
-              case AccountsActor.Accepted(summary) =>
-                complete(StatusCodes.OK -> summary)
-              case AccountsActor.Rejected(reason) =>
-                complete(StatusCodes.BadRequest, reason)
-            }
-          }
-        },
-        path (JavaUUID) { accountId =>
-          get {
-            val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, accountId.toString)
-            // Explore Why Get does not take the replyTo Actor Ref?
-            onSuccess(entityRef.ask(AccountsActor.Get)) { summary =>
-              if (summary.account == null) complete(StatusCodes.NotFound)
-              else complete(summary)
-            }
-          }
-        },
-        pathPrefix (JavaUUID / "tasks") {  accountId =>
-          concat (
+        pathPrefix("accounts") {
+          concat(
             post {
-              val newTaskId = java.util.UUID.randomUUID.toString
+              val newAccountId = java.util.UUID.randomUUID.toString
 
-              entity(as[AddTask]) { data =>
-                val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, accountId.toString)
+              entity(as[AddAccount]) { data =>
+                val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, newAccountId)
                 val reply: Future[AccountsActor.Confirmation] =
-                  entityRef.ask(AccountsActor.AddTaskToAccount(newTaskId,data.name, data.taskType, data.priority,data.assignee,data.reporter,data.dueDate,_))
+                  entityRef.ask(AccountsActor.AddAccount(data.name, data.subscription, _))
                 onSuccess(reply) {
                   case AccountsActor.Accepted(summary) =>
                     complete(StatusCodes.OK -> summary)
@@ -109,23 +78,10 @@ final class WorkflowRoutes (system: ActorSystem[_]) {
               }
             },
             put {
-              entity(as[UpdateTask]) { data =>
-                val entityRef = sharding.entityRefFor(TasksActor.EntityKey, data.taskId)
-                val reply: Future[TasksActor.Confirmation] =
-                  entityRef.ask(TasksActor.UpdateTask(data.name, data.taskType, data.priority, data.assignee, data.reporter, data.dueDate, _))
-                onSuccess(reply) {
-                  case TasksActor.Accepted(summary) =>
-                    complete(StatusCodes.OK -> summary)
-                  case TasksActor.Rejected(reason) =>
-                    complete(StatusCodes.BadRequest, reason)
-                }
-              }
-            },
-            delete {
-              entity(as[DeleteTask]) { data =>
-                val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, accountId.toString)
+              entity(as[UpdateAccount]) { data =>
+                val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, data.accountId)
                 val reply: Future[AccountsActor.Confirmation] =
-                  entityRef.ask(AccountsActor.RemoveTaskFromAccount(data.taskId,_))
+                  entityRef.ask(AccountsActor.UpdateAccount(data.name, data.subscription, _))
                 onSuccess(reply) {
                   case AccountsActor.Accepted(summary) =>
                     complete(StatusCodes.OK -> summary)
@@ -134,21 +90,75 @@ final class WorkflowRoutes (system: ActorSystem[_]) {
                 }
               }
             },
-            path (JavaUUID) { taskId =>
+            path(JavaUUID) { accountId =>
               get {
-                val entityRef = sharding.entityRefFor(TasksActor.EntityKey, taskId.toString)
+                val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, accountId.toString)
                 // Explore Why Get does not take the replyTo Actor Ref?
-                onSuccess(entityRef.ask(TasksActor.Get)) { summary =>
-                  if (summary.task == null) complete(StatusCodes.NotFound)
+                onSuccess(entityRef.ask(AccountsActor.Get)) { summary =>
+                  if (summary.account == null) complete(StatusCodes.NotFound)
                   else complete(summary)
                 }
               }
+            },
+            pathPrefix(JavaUUID / "tasks") { accountId =>
+              concat(
+                post {
+                  val newTaskId = java.util.UUID.randomUUID.toString
+
+                  entity(as[AddTask]) { data =>
+                    val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, accountId.toString)
+                    val reply: Future[AccountsActor.Confirmation] =
+                      entityRef.ask(AccountsActor.AddTaskToAccount(newTaskId, data.name, data.taskType, data.priority, data.assignee, data.reporter, data.dueDate, _))
+                    onSuccess(reply) {
+                      case AccountsActor.Accepted(summary) =>
+                        complete(StatusCodes.OK -> summary)
+                      case AccountsActor.Rejected(reason) =>
+                        complete(StatusCodes.BadRequest, reason)
+                    }
+                  }
+                },
+                put {
+                  entity(as[UpdateTask]) { data =>
+                    val entityRef = sharding.entityRefFor(TasksActor.EntityKey, data.taskId)
+                    val reply: Future[TasksActor.Confirmation] =
+                      entityRef.ask(TasksActor.UpdateTask(data.name, data.taskType, data.priority, data.assignee, data.reporter, data.dueDate, _))
+                    onSuccess(reply) {
+                      case TasksActor.Accepted(summary) =>
+                        complete(StatusCodes.OK -> summary)
+                      case TasksActor.Rejected(reason) =>
+                        complete(StatusCodes.BadRequest, reason)
+                    }
+                  }
+                },
+                delete {
+                  entity(as[DeleteTask]) { data =>
+                    val entityRef = sharding.entityRefFor(AccountsActor.EntityKey, accountId.toString)
+                    val reply: Future[AccountsActor.Confirmation] =
+                      entityRef.ask(AccountsActor.RemoveTaskFromAccount(data.taskId, _))
+                    onSuccess(reply) {
+                      case AccountsActor.Accepted(summary) =>
+                        complete(StatusCodes.OK -> summary)
+                      case AccountsActor.Rejected(reason) =>
+                        complete(StatusCodes.BadRequest, reason)
+                    }
+                  }
+                },
+                path(JavaUUID) { taskId =>
+                  get {
+                    val entityRef = sharding.entityRefFor(TasksActor.EntityKey, taskId.toString)
+                    // Explore Why Get does not take the replyTo Actor Ref?
+                    onSuccess(entityRef.ask(TasksActor.Get)) { summary =>
+                      if (summary.task == null) complete(StatusCodes.NotFound)
+                      else complete(summary)
+                    }
+                  }
+                }
+              )
             }
           )
         }
       )
     }
-  )
 
 }
 
@@ -159,7 +169,6 @@ object JsonFormats {
   import spray.json.DefaultJsonProtocol._
   import spray.json.deserializationError
   import java.text.SimpleDateFormat
-  import spray.json
   import spray.json.{JsString, JsValue, JsonFormat}
 
 
@@ -167,8 +176,7 @@ object JsonFormats {
     def write(date: Date) = JsString(dateToIsoString(date))
     def read(json: JsValue) = json match {
       case JsString(rawDate) =>
-        parseIsoDateString(rawDate)
-          .fold(deserializationError(s"Expected ISO Date format, got $rawDate"))(identity)
+        parseIsoDateString(rawDate).fold(deserializationError(s"Expected ISO Date format, got $rawDate"))(identity)
       case error => deserializationError(s"Expected JsString, got $error")
     }
   }
