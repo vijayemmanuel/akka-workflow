@@ -9,3 +9,7 @@ Run first node in another terminal
 
 `sbt "runMain com.avs.workflow.WorkflowApp 2551"`
 
+Running Load Tests
+
+`sbt "runMain com.avs.workflow.utilities.LoadTest`
+

@@ -53,13 +53,13 @@ class Simulation(context: ActorContext[Trigger],targetPorts: Seq[Int]) extends
     override def onMessage(message: Trigger): Behavior[Trigger] = {
       message match {
         case Start =>
-          //context.system.log.info(s"Load test start")
+          //context.system.log.info(s"Test loop start")
           startTime = System.currentTimeMillis()
           run().map(x => context.self ! Summary(x.accountId))
         case Stop =>
           context.stop(context.self)
-        case order: Summary =>
-          context.system.log.info(s"Order completed in ${System.currentTimeMillis() - startTime} ms")
+        case testloop: Summary =>
+          context.system.log.info(s"Testloop  completed in ${System.currentTimeMillis() - startTime} ms")
           context.self ! Start
         //case Status.Failure(ex) =>
          // context.system.log.info(s"Order Failed: ${ex.getMessage}")
